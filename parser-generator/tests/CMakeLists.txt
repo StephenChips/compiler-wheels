@@ -5,7 +5,7 @@ if(WIN32)
 	set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 endif()
 
-add_executable(tests-main tests-main.cpp)
+add_executable(tests-main "tests-main.ixx")
 
 target_link_libraries(
   tests-main
