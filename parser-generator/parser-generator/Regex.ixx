@@ -19,7 +19,7 @@ export struct Transition {
 		bool operator==(const Range&) const = default;
 	};
 
-	enum AcceptingMode { INCLUDE_CHARS, EXCLUDE_CHARS, ACCEPT_ALL_CHAR };
+	enum AcceptingMode { INCLUDE_CHARS, EXCLUDE_CHARS, ACCEPT_ANY_CHARACTER };
 
 	int destination;
 	AcceptingMode mode;
@@ -28,7 +28,7 @@ export struct Transition {
 	bool operator==(const Transition&) const = default;
 };
 
-export Transition acceptsAllChars();
+export Transition acceptsAnyCharacter();
 export Transition accepts(std::initializer_list<std::variant<char, Transition::Range>> conditions);
 export template<std::ranges::range Iter> Transition accepts(Iter begin, Iter end);
 export Transition accepts(std::variant<char, Transition::Range> cond);
@@ -94,9 +94,9 @@ public:
 
 module : private;
 
-Transition acceptsAllChars() {
+Transition acceptsAnyCharacter() {
 	Transition t;
-	t.mode = Transition::ACCEPT_ALL_CHAR;
+	t.mode = Transition::ACCEPT_ANY_CHARACTER;
 	return t;
 }
 
@@ -428,17 +428,24 @@ std::tuple<InitialState, AcceptingState> parseRegexBasicUnit(Automata& automata,
 		cursor++; // skip ')'
 		return initialAndAcceptingStates;
 	}
-	else if (regexPattern[cursor] == '[') {
+
+	if (regexPattern[cursor] == '[') {
 		return parseCharacterClass(automata, regexPattern, cursor);
 	}
-	else {
-		// parse a single character in the regex.
-		int initialState = addNewState(automata);
-		int acceptingState = addNewState(automata);
-		addTransition(automata, initialState, to(acceptingState, accepts(regexPattern[cursor])));
-		cursor++;
-		return { initialState, acceptingState };
+
+	// parse a single character in the regex.
+	int initialState = addNewState(automata);
+	int acceptingState = addNewState(automata);
+
+	if (regexPattern[cursor] == '.') {
+		addTransition(automata, initialState, to(acceptingState, acceptsAnyCharacter()));
 	}
+	else {
+		addTransition(automata, initialState, to(acceptingState, accepts(regexPattern[cursor])));
+	}
+
+	cursor++;
+	return { initialState, acceptingState };
 }
 
 std::tuple<InitialState, AcceptingState> parseCharacterClass(Automata& automata, const std::string& regexPattern, int& cursor)
@@ -531,7 +538,7 @@ std::tuple<InitialState, AcceptingState> parseCharacterClass(Automata& automata,
 			addTransition(automata, initialState, eps(acceptingState));
 		}
 		else {
-			addTransition(automata, initialState, to(acceptingState, acceptsAllChars()));
+			addTransition(automata, initialState, to(acceptingState, acceptsAnyCharacter()));
 		}
 		
 	}

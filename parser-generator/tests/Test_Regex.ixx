@@ -279,6 +279,19 @@ TEST(Test_ConvertRegexToNFA_BasicRegexSyntax, repeats_any_number_of_times) {
 * we are confident to use it for testing any non-basic regexes.
 */
 
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, matches_any_character) {
+	auto actual = convertRegexToNFA(".");
+	Automata expect{
+		.stateGraph = {
+			{ to(1, acceptsAnyCharacter()) },
+			{}
+		},
+		.stateTypes = { INITIAL_STATE, ACCEPTING_STATE }
+	};
+
+	EXPECT_EQ(actual, expect);
+}
+
 TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, matches_at_least_once) {
 	auto actual = convertRegexToNFA("a+");
 	Automata expect{
@@ -286,7 +299,8 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, matches_at_least_once) {
 			{ to(1, accepts('a'))},
 			{ to(4, accepts(EPSILON)) },
 			{ to(3, accepts('a')) },
-			{ to(5, accepts(EPSILON)), to(2, accepts(EPSILON)) },
+			{ to(5, accepts(EPSILON)), 
+			to(2, accepts(EPSILON)) },
 			{ to(5, accepts(EPSILON)), to(2, accepts(EPSILON)) },
 			{}
 		},
@@ -397,7 +411,7 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, repeats_N_to_M_times) {
 	EXPECT_EQ(actual, expect);
 }
 
-TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, regex_with_curly_braces) {
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, incomplete_repetition_should_be_treat_as_concatenation) {
 	FAIL() << "Not implemented yet";
 	std::vector<std::string> patterns{ "{1, 3bc", "}ca", "{bc" };
 }
@@ -546,4 +560,28 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, character_class_that_is_out_of_
 			FAIL() << "It should throw a std::runtime_error";
 		}
 	}
+}
+
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, character_classes_that_has_no_ending_bracket) {
+	std::vector<std::string> patterns{ "[", "[12", "[12,", "[12,33", "[a"};
+
+	for (const auto& pattern : patterns) {
+		try {
+			convertRegexToNFA(pattern);
+			FAIL() << std::format("Invalid regex {} should causes an exception but there isn't one.", pattern);
+
+		}
+		catch (std::runtime_error(e)) {
+			EXPECT_STREQ(e.what(), "Invalid regex: missing ending bracket ']'");
+		}
+		catch (...) {
+			FAIL() << "It should throw a std::runtime_error";
+		}
+	}
+}
+
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, character_class_looks_invalid_but_its_ok) {
+	std::vector<std::string> patterns{ "[[-]", "[-]]", "]"};
+
+	FAIL() << "Not implemented";
 }
