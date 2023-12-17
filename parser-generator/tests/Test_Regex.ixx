@@ -572,7 +572,7 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, character_classes_that_has_no_e
 
 		}
 		catch (std::runtime_error(e)) {
-			EXPECT_STREQ(e.what(), "Invalid regex: missing ending bracket ']'");
+			EXPECT_STREQ(e.what(), "Invalid regex: missing ending bracket ']'.");
 		}
 		catch (...) {
 			FAIL() << "It should throw a std::runtime_error";

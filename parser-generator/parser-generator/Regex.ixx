@@ -525,7 +525,7 @@ std::tuple<InitialState, AcceptingState> parseCharacterClass(Automata& automata,
 	}
 
 	if (cursor == regexPattern.size()) {
-		throw std::runtime_error("Invalid regular expression");
+		throw std::runtime_error("Invalid regex: missing ending bracket ']'.");
 	}
 	else {
 		cursor++; // skip the ']'
