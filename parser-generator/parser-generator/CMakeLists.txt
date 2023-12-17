@@ -5,7 +5,7 @@
 find_package(fmt CONFIG REQUIRED)
 
 # Add source to this project's executable.
-add_library (parser-generator "parser-generator.ixx" )
+add_library (parser-generator "ValidateGrammar.ixx" "Grammar.ixx" "Parser.ixx" "Lexer.ixx"  "ParserGenerator.ixx" "Regex.ixx" )
 target_link_libraries(parser-generator fmt::fmt)
 
 

@@ -5,10 +5,11 @@ if(WIN32)
 	set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 endif()
 
-add_executable(tests-main "tests-main.ixx")
+add_executable(tests-main "Test_ValidateGrammar.ixx" "Test_Regex.ixx")
 
 target_link_libraries(
   tests-main
+  parser-generator
   GTest::gtest_main
 )
 
