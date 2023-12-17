@@ -12,11 +12,11 @@ module;
 * 1. The fundamentals: 
 *   a. ab (concatenation)
 *   b. a|b (branching)
-*   c. a* (appears for any times, include zero)
+*   c. a* (appears for any times, includes zero)
 * 2. frequently used features:
 *   a. a+ (appears once or more)
 *   b. a? (optional),
-*   c. [abc], [^abc], [a-z] ... (range matching)
+*   c. [abc], [^abc], [a-z] (range matching)
 *   f. a{3}, a{3, 5}, a{, 10} (repetition)
 */
 

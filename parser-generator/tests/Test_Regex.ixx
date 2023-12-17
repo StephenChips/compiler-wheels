@@ -22,6 +22,13 @@ TEST(Test_Regex, test_match_single_character) {
 	EXPECT_EQ(result.endIter, str2.cbegin());
 }
 
+
+/*
+ * Following section of test cases test basic regexes, those contains
+ * only "three fundamentals": concatenation, alternative and kleene
+ * closure.
+ */
+
 TEST(Test_ConvertRegexToNFA_BasicRegexSyntax, match_epsilon) {
 	auto actual = convertRegexToNFA("");
 	auto expect = Automata{
@@ -128,7 +135,7 @@ TEST(Test_ConvertRegexToNFA_BasicRegexSyntax, match_multiple_epsilon_OR_branches
 	EXPECT_EQ(actual, expect);
 }
 
-TEST(Test_ConvertRegexToNFA, match_a_single_character) {
+TEST(Test_ConvertRegexToNFA_BasicRegexSyntax, match_a_single_character) {
 	auto actual = convertRegexToNFA("a");
 	auto expect = Automata{
 			.stateGraph = {
@@ -141,7 +148,7 @@ TEST(Test_ConvertRegexToNFA, match_a_single_character) {
 	EXPECT_EQ(actual, expect);
 }
 
-TEST(Test_ConvertRegexToNFA, match_a_word) {
+TEST(Test_ConvertRegexToNFA_BasicRegexSyntax, match_a_word) {
 	auto actual = convertRegexToNFA("while");
 	auto expect = Automata {
 			.stateGraph = {
@@ -173,7 +180,7 @@ TEST(Test_ConvertRegexToNFA, match_a_word) {
 	EXPECT_EQ(actual, expect);
 }
 
-TEST(Test_ConvertRegexToNFA, match_any_of_two_words) {
+TEST(Test_ConvertRegexToNFA_BasicRegexSyntax, match_any_of_two_words) {
 	auto actual = convertRegexToNFA("cat|tea");
 	auto expect = Automata{
 		.stateGraph = {
@@ -213,7 +220,7 @@ TEST(Test_ConvertRegexToNFA, match_any_of_two_words) {
 	EXPECT_EQ(actual, expect);
 }
 
-TEST(Test_ConvertRegexToNFA, match_regex_in_a_pair_of_parentheses) {
+TEST(Test_ConvertRegexToNFA_BasicRegexSyntax, match_regex_in_a_pair_of_parentheses) {
 	auto actual = convertRegexToNFA("c(a|b)");
 	auto expect = Automata{
 		.stateGraph = {
@@ -241,7 +248,7 @@ TEST(Test_ConvertRegexToNFA, match_regex_in_a_pair_of_parentheses) {
 	EXPECT_EQ(actual, expect);
 }
 
-TEST(Test_ConvertRegexToNFA, repeats_any_number_of_times) {
+TEST(Test_ConvertRegexToNFA_BasicRegexSyntax, repeats_any_number_of_times) {
 	auto actual = convertRegexToNFA("a*");
 	auto expect = Automata{
 		.stateGraph = {
@@ -261,7 +268,18 @@ TEST(Test_ConvertRegexToNFA, repeats_any_number_of_times) {
 	EXPECT_EQ(actual, expect);
 }
 
-TEST(Test_ConvertRegexToNFA, matches_at_least_once) {
+/*
+* Following section of test cases test non-basic regexes, those contains features
+* that are not concatenation, alternative or kleene closure. For example:
+* /a+/, /a{1, 5}/
+* 
+* The "expected" automata may be generated from a equivalent basic regexes.
+* As long as we have sufficient tests on the basic regexes, which garentee
+* the function can return a correct automata when parsing a basic regex,
+* we are confident to use it for testing any non-basic regexes.
+*/
+
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, matches_at_least_once) {
 	auto actual = convertRegexToNFA("a+");
 	Automata expect{
 		.stateGraph = {
@@ -285,7 +303,7 @@ TEST(Test_ConvertRegexToNFA, matches_at_least_once) {
 	EXPECT_EQ(actual, expect);
 }
 
-TEST(Test_ConvertRegexToNFA, optional) {
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, optional) {
 	auto actual = convertRegexToNFA("a?");
 	Automata expect{
 		.stateGraph = {
@@ -299,7 +317,7 @@ TEST(Test_ConvertRegexToNFA, optional) {
 }
 
 
-TEST(Test_ConvertRegexToNFA, consecutive_qualiders_are_invalid) {
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, consecutive_qualiders_are_invalid) {
 	const std::vector<std::string> listOfRegexes = {
 		"a**", "a*+", "a*?", "a++", "a+*", "a+?", "a??", "a?*", "a?+"
 	};
@@ -314,7 +332,7 @@ TEST(Test_ConvertRegexToNFA, consecutive_qualiders_are_invalid) {
 		}
 	}
 }
-TEST(Test_ConvertRegexToNFA, leading_qualiders_are_invalid) {
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, leading_qualiders_are_invalid) {
 	const std::vector<std::string> listOfRegexes = {
 		"*a", "{3}a", "?a", "+a", "(*abc)", "(?bc)"
 	};
@@ -334,21 +352,21 @@ TEST(Test_ConvertRegexToNFA, leading_qualiders_are_invalid) {
 	}
 }
 
-TEST(Test_ConvertRegexToNFA, exactly_repeats_N_times) {
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, exactly_repeats_N_times) {
 	auto actual = convertRegexToNFA("a{5}");
 	auto expect = convertRegexToNFA("aaaaa");
 	EXPECT_EQ(actual, expect);
 }
 
 
-TEST(Test_ConvertRegexToNFA, repeats_at_least_N_times) {
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, repeats_at_least_N_times) {
 	EXPECT_EQ(
 		convertRegexToNFA("a{5, }"),
 		convertRegexToNFA("aaaaaa*")
 	);
 }
 
-TEST(Test_ConvertRegexToNFA, repeats_N_to_M_times) {
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, repeats_N_to_M_times) {
 	auto actual = convertRegexToNFA("a{1, 5}");
 	Automata expect{
 		.stateGraph = {
