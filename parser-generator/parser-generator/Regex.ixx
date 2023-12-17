@@ -13,13 +13,13 @@ module;
 
 export module Regex;
 
-struct Transition {
+export struct Transition {
 	struct Range {
 		char from, to;
 		bool operator==(const Range&) const = default;
 	};
 
-	enum AcceptingMode { INCLUDE_CHARS, EXCLUDE_CHARS };
+	enum AcceptingMode { INCLUDE_CHARS, EXCLUDE_CHARS, ACCEPT_ALL_CHAR };
 
 	int destination;
 	AcceptingMode mode;
@@ -28,7 +28,7 @@ struct Transition {
 	bool operator==(const Transition&) const = default;
 };
 
-
+export Transition acceptsAllChars();
 export Transition accepts(std::initializer_list<std::variant<char, Transition::Range>> conditions);
 export template<std::ranges::range Iter> Transition accepts(Iter begin, Iter end);
 export Transition accepts(std::variant<char, Transition::Range> cond);
@@ -69,6 +69,7 @@ struct RepetitionQualifier {
 std::tuple<InitialState, AcceptingState> parseRegex(Automata& automata, const std::string regexPattern, int& cursor);
 std::tuple<InitialState, AcceptingState> parseConcatenation(Automata& automata, const std::string& regexPattern, int& cursor);
 std::tuple<InitialState, AcceptingState> parseRegexBasicUnit(Automata& automata, const std::string& regexPattern, int& cursor);
+std::tuple<InitialState, AcceptingState> parseCharacterClass(Automata& automata, const std::string& regexPattern, int& cursor);
 std::tuple<InitialState, AcceptingState> addKleeneClosure(Automata& automata, int initialState, int acceptingState);
 int parseInt(const std::string& regexPattern, int& cursor);
 void skipBlanks(const std::string& str, int& cursor);
@@ -93,6 +94,12 @@ public:
 
 module : private;
 
+Transition acceptsAllChars() {
+	Transition t;
+	t.mode = Transition::ACCEPT_ALL_CHAR;
+	return t;
+}
+
 Transition accepts(std::initializer_list<std::variant<char, Transition::Range>> conditions) {
 	Transition t;
 	t.conditions = std::vector(conditions.begin(), conditions.end());
@@ -101,11 +108,11 @@ Transition accepts(std::initializer_list<std::variant<char, Transition::Range>> 
 }
 
 template<std::ranges::range Iter>
-Transition accepts(Iter begin, Iter end) {
+Transition accepts(Iter &&iter) {
 	Transition t;
-	t.conditions = std::vector(begin, end);
+	t.conditions.assign(iter.begin(), iter.end());
 	t.mode = Transition::INCLUDE_CHARS;
-	return *this;
+	return t;
 }
 
 Transition accepts(std::variant<char, Transition::Range> cond) {
@@ -127,11 +134,11 @@ Transition acceptsAnyExcept(std::initializer_list<std::variant<char, Transition:
 }
 
 template<std::ranges::range Iter>
-Transition acceptsAnyExcept(Iter begin, Iter end) {
+Transition acceptsAnyExcept(Iter &&iter) {
 	Transition t;
-	t.conditions = std::vector(begin, end);
+	t.conditions = std::vector(iter.begin(), iter.end());
 	t.mode = Transition::EXCLUDE_CHARS;
-	return *this;
+	return t;
 }
 
 Transition acceptsAnyExcept(std::variant<char, Transition::Range> cond) {
@@ -343,6 +350,7 @@ void addQualifierForBasicUnit(
 			}
 		}
 	}
+
 }
 
 std::tuple<InitialState, AcceptingState> parseConcatenation(Automata& automata, const std::string& regexPattern, int& cursor) {
@@ -366,6 +374,12 @@ std::tuple<InitialState, AcceptingState> parseConcatenation(Automata& automata, 
 			"it must be placed after a character, a right parenthesis or a right bracket.\n"
 			"For example: a*, (abc)* and [abc]*"
 		);
+	}
+
+	if (regexPattern[cursor] == '}' || regexPattern[cursor] == ']') {
+		// It isn't valid that read the ending brackets without reading the starting one first.
+		// For example: /a}/, /]acb/ all all invalid regexes.
+		throw std::runtime_error("Invalid regular expression");
 	}
 
 	do {
@@ -414,14 +428,123 @@ std::tuple<InitialState, AcceptingState> parseRegexBasicUnit(Automata& automata,
 		cursor++; // skip ')'
 		return initialAndAcceptingStates;
 	}
+	else if (regexPattern[cursor] == '[') {
+		return parseCharacterClass(automata, regexPattern, cursor);
+	}
 	else {
 		// parse a single character in the regex.
 		int initialState = addNewState(automata);
-		int endingState = addNewState(automata);
-		addTransition(automata, initialState, to(endingState, accepts(regexPattern[cursor])));
+		int acceptingState = addNewState(automata);
+		addTransition(automata, initialState, to(acceptingState, accepts(regexPattern[cursor])));
 		cursor++;
-		return { initialState, endingState };
+		return { initialState, acceptingState };
 	}
+}
+
+std::tuple<InitialState, AcceptingState> parseCharacterClass(Automata& automata, const std::string& regexPattern, int& cursor)
+{
+	std::optional<char> previousCharacter; // The character right before one that the cursor's now pointing.
+	std::vector<std::variant<char, Transition::Range>> conditions;
+	Transition::AcceptingMode acceptingMode = Transition::INCLUDE_CHARS;
+
+	cursor++; // skip leading '['
+
+	if (cursor < regexPattern.size() && regexPattern[cursor] == '^') {
+		acceptingMode = Transition::EXCLUDE_CHARS;
+		cursor++;
+	}
+
+	while (cursor < regexPattern.size() && regexPattern[cursor] != ']') {
+		// If the current character isn't a '-', we are sure that the previous
+		// character is not the beginning character of a range.
+		if (regexPattern[cursor] != '-') {
+			if (previousCharacter) {
+				conditions.push_back(*previousCharacter);
+			}
+			previousCharacter = regexPattern[cursor];
+			cursor++;
+			continue;
+		}
+
+		// If there isn't character being parsed, the '-' must be the first character
+		// in the class. e.g. /[-a]/. 
+		// Such character class means the '-' is one of its acceptable characters.
+		if (!previousCharacter) {
+			conditions.push_back('-');
+			cursor++;
+			continue;
+		}
+
+		// Otherwise we get the character before the '-'.
+		const char characterBeforeDash = *previousCharacter;
+
+		// If there is a character before '-', we shall inspect what follows it.
+		cursor++;
+
+		// If '-' is the last character of the string, we should breaks the loop
+		// and throw an error, because it misses the ending ']'.
+		// e.g. /[a-/
+		if (cursor == regexPattern.size()) {
+			break;
+		}
+
+		// If what follows '-' is a ']', it also cannot forms a range. e.g. /[a-]/.
+		// Such character class means the '-' and the character before it are two
+		// of its acceptable characters.
+		if (regexPattern[cursor] == ']') {
+			conditions.push_back(characterBeforeDash);
+			conditions.push_back('-');
+			cursor++;
+			continue;
+		}
+
+		// Otherwise we get the character after the '-'.
+		const char characterAfterDash = regexPattern[cursor];
+		cursor++;
+
+		// Test invalid case like /[z-a]/.
+		if (characterBeforeDash > characterAfterDash) {
+			throw std::runtime_error("Invalid regex expression: range out of order in the character class.");
+		}
+
+		// Finally, we come to the situation that we can create a range!
+		conditions.push_back(Transition::Range{ characterBeforeDash, characterAfterDash });
+	}
+
+	// If the last condition is a char, it will be still in the 'previousCharacter' variable, we should add it
+	// the the vector now.
+	if (previousCharacter && (conditions.empty() || std::holds_alternative<char>(conditions.back()))) {
+		conditions.push_back(*previousCharacter);
+	}
+
+	if (cursor == regexPattern.size()) {
+		throw std::runtime_error("Invalid regular expression");
+	}
+	else {
+		cursor++; // skip the ']'
+	}
+
+	const auto initialState = addNewState(automata);
+	const auto acceptingState = addNewState(automata);
+	if (conditions.empty()) {
+		if (acceptingMode == Transition::INCLUDE_CHARS) {
+			addTransition(automata, initialState, eps(acceptingState));
+		}
+		else {
+			addTransition(automata, initialState, to(acceptingState, acceptsAllChars()));
+		}
+		
+	}
+	else {
+		if (acceptingMode == Transition::INCLUDE_CHARS) {
+			addTransition(automata, initialState, to(acceptingState, accepts(conditions)));
+		}
+		else {
+			addTransition(automata, initialState, to(acceptingState, acceptsAnyExcept(conditions)));
+		}
+	}
+
+	return { initialState, acceptingState };
 }
 
 Automata convertRegexToNFA(const std::string regexPattern) {

@@ -396,3 +396,154 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, repeats_N_to_M_times) {
 	};
 	EXPECT_EQ(actual, expect);
 }
+
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, regex_with_curly_braces) {
+	FAIL() << "Not implemented yet";
+	std::vector<std::string> patterns{ "{1, 3bc", "}ca", "{bc" };
+}
+
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, match_a_set_of_characters) {
+	auto actual = convertRegexToNFA("[abc]");
+	Automata expect = {
+		.stateGraph = {
+			{ to(1, accepts({ 'a', 'b', 'c' }))},
+			{}
+		},
+		.stateTypes = {
+			INITIAL_STATE,
+			ACCEPTING_STATE
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+}
+
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, match_a_range_of_characters) {
+	auto actual = convertRegexToNFA("[a-c]");
+	Automata expect = {
+		.stateGraph = {
+			{ to(1, accepts(Transition::Range{'a', 'c'}))},
+			{}
+		},
+		.stateTypes = {
+			INITIAL_STATE,
+			ACCEPTING_STATE
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+}
+
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, match_a_set_and_a_range_of_characters) {
+	auto actual = convertRegexToNFA("[abcA-C]");
+	Automata expect = {
+		.stateGraph = {
+			{ to(1, accepts({ 'a', 'b', 'c', Transition::Range{'A', 'C'}}))},
+			{}
+		},
+		.stateTypes = {
+			INITIAL_STATE,
+			ACCEPTING_STATE
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+}
+
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, match_any_except_a_set_of_characters) {
+	auto actual = convertRegexToNFA("[^abc]");
+	Automata expect = {
+		.stateGraph = {
+			{ to(1, acceptsAnyExcept({ 'a', 'b', 'c' }))},
+			{}
+		},
+		.stateTypes = {
+			INITIAL_STATE,
+			ACCEPTING_STATE
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+}
+
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, match_any_except_a_range_of_characters) {
+	auto actual = convertRegexToNFA("[^a-c]");
+	Automata expect = {
+		.stateGraph = {
+			{ to(1, acceptsAnyExcept(Transition::Range{'a', 'c'}))},
+			{}
+		},
+		.stateTypes = {
+			INITIAL_STATE,
+			ACCEPTING_STATE
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+}
+
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, match_any_except_a_set_and_a_range_of_characters) {
+	auto actual = convertRegexToNFA("[^abcA-C]");
+	Automata expect = {
+		.stateGraph = {
+			{ to(1, acceptsAnyExcept({ 'a', 'b', 'c', Transition::Range{'A', 'C'}}))},
+			{}
+		},
+		.stateTypes = {
+			INITIAL_STATE,
+			ACCEPTING_STATE
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+}
+
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, empty_square_brackets) {
+	auto actual = convertRegexToNFA("[]");
+	Automata expect = {
+		.stateGraph = {
+			{ eps(1) },
+			{}
+		},
+		.stateTypes = {
+			INITIAL_STATE,
+			ACCEPTING_STATE
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+}
+
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, square_bracket_match_a_space_or_a) {
+	auto actual = convertRegexToNFA("[ a]");
+	Automata expect = {
+		.stateGraph = {
+			{ to(1, accepts({' ', 'a'}))},
+			{}
+		},
+		.stateTypes = {
+			INITIAL_STATE,
+			ACCEPTING_STATE
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+}
+
+
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, character_class_that_is_out_of_order) {
+	std::vector<std::string> patterns{ "[c-a]", "[Z-A]", "[9-0]"};
+	for (const auto& pattern : patterns) {
+		try {
+			convertRegexToNFA(pattern);
+			FAIL() << std::format("Invalid regex {} should causes an exception but there isn't one.", pattern);
+
+		}
+		catch (std::runtime_error(e)) {
+			EXPECT_STREQ(e.what(), "Invalid regex expression: range out of order in the character class.");
+		}
+		catch (...) {
+			FAIL() << "It should throw a std::runtime_error";
+		}
+	}
+}
