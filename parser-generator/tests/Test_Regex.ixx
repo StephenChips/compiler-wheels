@@ -360,7 +360,7 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, leading_qualiders_are_invalid) 
 			EXPECT_STREQ(e.what(), 
 				"A qualifier cannot be the first character of a regex, "
 				"it must be placed after a character, a right parenthesis or a right bracket.\n"
-				"For example: a*, (abc)* and [abc]*"
+				"For example: /a*/, /(abc)+/ and /[abc]{3}/"
 			);
 		}
 	}
@@ -412,8 +412,97 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, repeats_N_to_M_times) {
 }
 
 TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, incomplete_repetition_should_be_treat_as_concatenation) {
-	FAIL() << "Not implemented yet";
-	std::vector<std::string> patterns{ "{1, 3bc", "}ca", "{bc" };
+	auto actual = convertRegexToNFA("{");
+	auto expect = Automata {
+		.stateGraph {
+			{ to(1, accepts('{')) },
+			{}
+		},
+
+		.stateTypes {
+			INITIAL_STATE,
+			ACCEPTING_STATE,
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+
+	actual = convertRegexToNFA("{1");
+	expect = Automata{
+		.stateGraph {
+			{ to(1, accepts('{')) },
+			{ eps(2) },
+			{ to(3, accepts('1')) },
+			{}
+		},
+
+		.stateTypes {
+			INITIAL_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			ACCEPTING_STATE,
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+
+	actual = convertRegexToNFA("{1, ");
+	expect = Automata{
+		.stateGraph {
+			{ to(1, accepts('{')) },
+			{ eps(2) },
+			{ to(3, accepts('1')) },
+			{ eps(4) },
+			{ to(5, accepts(',')) },
+			{ eps(6) },
+			{ to(7, accepts(' ')) },
+			{}
+		},
+
+		.stateTypes {
+			INITIAL_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			ACCEPTING_STATE,
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+
+	actual = convertRegexToNFA("{1, 3");
+	expect = {
+		.stateGraph {
+			{ to(1, accepts('{')) },
+			{ eps(2) },
+			{ to(3, accepts('1')) },
+			{ eps(4) },
+			{ to(5, accepts(',')) },
+			{ eps(6) },
+			{ to(7, accepts(' ')) },
+			{ eps(8) },
+			{ to(9, accepts('3')) },
+			{},
+		},
+
+		.stateTypes {
+			INITIAL_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			ACCEPTING_STATE,
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
 }
 
 TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, match_a_set_of_characters) {

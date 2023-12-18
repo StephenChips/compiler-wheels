@@ -30,12 +30,12 @@ export struct Transition {
 
 export Transition acceptsAnyCharacter();
 export Transition accepts(std::initializer_list<std::variant<char, Transition::Range>> conditions);
-export template<std::ranges::range Iter> Transition accepts(Iter begin, Iter end);
+export template<std::ranges::range Iter> Transition accepts(Iter&& iterable);
 export Transition accepts(std::variant<char, Transition::Range> cond);
 export Transition eps(int destination);
 
 export Transition acceptsAnyExcept(std::initializer_list<std::variant<char, Transition::Range>> conditions);
-export template<std::ranges::range Iter> Transition acceptsAnyExcept(Iter begin, Iter end);
+export template<std::ranges::range Iter> Transition acceptsAnyExcept(Iter&& iterable);
 export Transition acceptsAnyExcept(std::variant<char, Transition::Range> cond);
 
 export Transition to(int destination, Transition transition);
@@ -55,9 +55,6 @@ export struct Automata {
 	bool operator==(const Automata&) const = default;
 };
 
-int addNewState(Automata& automata, StateType stateType = PLAIN_STATE);
-void addTransition(Automata& automata, int fromNode, Transition node);
-
 using InitialState = int;
 using AcceptingState = int;
 
@@ -66,14 +63,6 @@ struct RepetitionQualifier {
 	int n, m;
 };
 
-std::tuple<InitialState, AcceptingState> parseRegex(Automata& automata, const std::string regexPattern, int& cursor);
-std::tuple<InitialState, AcceptingState> parseConcatenation(Automata& automata, const std::string& regexPattern, int& cursor);
-std::tuple<InitialState, AcceptingState> parseRegexBasicUnit(Automata& automata, const std::string& regexPattern, int& cursor);
-std::tuple<InitialState, AcceptingState> parseCharacterClass(Automata& automata, const std::string& regexPattern, int& cursor);
-std::tuple<InitialState, AcceptingState> addKleeneClosure(Automata& automata, int initialState, int acceptingState);
-int parseInt(const std::string& regexPattern, int& cursor);
-void skipBlanks(const std::string& str, int& cursor);
-RepetitionQualifier parseRepetitionQuealifier(const std::string& regexPattern, int& cursor);
 constexpr bool isTheFirstCharOfQualifier(const char ch);
 
 export Automata convertRegexToNFA(const std::string regexPattern);
@@ -92,6 +81,17 @@ public:
 	MatchResult match(std::string::const_iterator str);
 };
 
+int addNewState(Automata& automata, StateType stateType = PLAIN_STATE);
+void addTransition(Automata& automata, int fromNode, Transition node);
+std::tuple<InitialState, AcceptingState> parseRegex(Automata& automata, const std::string regexPattern, int& cursor);
+std::tuple<InitialState, AcceptingState> parseConcatenation(Automata& automata, const std::string& regexPattern, int& cursor);
+std::tuple<InitialState, AcceptingState> parseRegexBasicUnit(Automata& automata, const std::string& regexPattern, int& cursor);
+std::tuple<InitialState, AcceptingState> parseCharacterClass(Automata& automata, const std::string& regexPattern, int& cursor);
+void addKleeneClosure(Automata& automata, int& initialState, int& acceptingState);
+int parseInt(const std::string& regexPattern, int& cursor);
+void skipBlanks(const std::string& str, int& cursor);
+std::optional<RepetitionQualifier> parseRepetitionQualifier(const std::string& regexPattern, int& cursor);
+
 module : private;
 
 Transition acceptsAnyCharacter() {
@@ -108,7 +108,7 @@ Transition accepts(std::initializer_list<std::variant<char, Transition::Range>> 
 }
 
 template<std::ranges::range Iter>
-Transition accepts(Iter &&iter) {
+Transition accepts(Iter&& iter) {
 	Transition t;
 	t.conditions.assign(iter.begin(), iter.end());
 	t.mode = Transition::INCLUDE_CHARS;
@@ -123,7 +123,7 @@ Transition accepts(std::variant<char, Transition::Range> cond) {
 }
 
 Transition eps(int destination) {
-	return to(destination,  accepts(EPSILON));
+	return to(destination, accepts(EPSILON));
 }
 
 Transition acceptsAnyExcept(std::initializer_list<std::variant<char, Transition::Range>> conditions) {
@@ -134,7 +134,7 @@ Transition acceptsAnyExcept(std::initializer_list<std::variant<char, Transition:
 }
 
 template<std::ranges::range Iter>
-Transition acceptsAnyExcept(Iter &&iter) {
+Transition acceptsAnyExcept(Iter&& iter) {
 	Transition t;
 	t.conditions = std::vector(iter.begin(), iter.end());
 	t.mode = Transition::EXCLUDE_CHARS;
@@ -156,9 +156,9 @@ Transition to(int destination, Transition transition) {
 /*
 * The function will parse a regex and generate the correspondent states in the automata. If there are other states in
 * the automata, for instance, we've used the automata to generate a NFA for another regex before, the new states are isolated
-* from those old states. From a graph prespective, the new states together form a new component. The initial state and the 
+* from those old states. From a graph prespective, the new states together form a new component. The initial state and the
 * accepting state of the new NFA are returned.
-* 
+*
 */
 std::tuple<InitialState, AcceptingState> parseRegex(Automata& automata, const std::string regexPattern, int& cursor) {
 	const auto [initialStateOfSubpart, acceptingStateOfSubpart] = parseConcatenation(automata, regexPattern, cursor);
@@ -183,7 +183,7 @@ std::tuple<InitialState, AcceptingState> parseRegex(Automata& automata, const st
 	return { initialState, acceptingState };
 }
 
-std::tuple<InitialState, AcceptingState> addKleeneClosure(Automata& automata, int initialState, int acceptingState) {
+void addKleeneClosure(Automata& automata, int& initialState, int& acceptingState) {
 	// if there is a "*" operator right after the expression we've just parsed,
 	// We will make a kleene closure for it.
 	int initialStateOfKleeneClosure = addNewState(automata);
@@ -194,14 +194,15 @@ std::tuple<InitialState, AcceptingState> addKleeneClosure(Automata& automata, in
 	addTransition(automata, acceptingState, eps(acceptingStateOfKleeneClosure));
 	addTransition(automata, acceptingState, eps(initialState));
 
-	return { initialStateOfKleeneClosure, acceptingStateOfKleeneClosure };
+	initialState = initialStateOfKleeneClosure;
+	acceptingState = acceptingStateOfKleeneClosure;
 }
 
 void skipBlanks(const std::string& str, int& cursor) {
 	while (cursor < str.size() && std::isspace(str[cursor])) cursor++;
 }
 
-int parseInt(const std::string& regexPattern, int &cursor) {
+int parseInt(const std::string& regexPattern, int& cursor) {
 	int n = 0;
 	do {
 		n = n * 10 + regexPattern[cursor] - '0';
@@ -210,26 +211,30 @@ int parseInt(const std::string& regexPattern, int &cursor) {
 	return n;
 }
 
-RepetitionQualifier parseRepetitionQuealifier(const std::string& regexPattern, int& cursor) {
+std::optional<RepetitionQualifier> parseRepetitionQualifier(const std::string& regexPattern, int& cursor) {
+	int nTimes, mTimes;
+	int oldCursor = cursor;
+
 	cursor++;
 	skipBlanks(regexPattern, cursor);
 
-	if (cursor == regexPattern.size() ||!std::isdigit(regexPattern[cursor])) {
-		throw std::runtime_error("invalid regex.");
+	if (cursor == regexPattern.size() || !std::isdigit(regexPattern[cursor])) {
+		goto fail;
 	}
 
-	int nTimes = parseInt(regexPattern, cursor);
+	nTimes = parseInt(regexPattern, cursor);
 	skipBlanks(regexPattern, cursor);
 
 	if (cursor == regexPattern.size()) {
-		throw std::runtime_error("invalid regex");
+		goto fail;
 	}
 
 	if (regexPattern[cursor] == '}') {
 		cursor++;
-		return {
-			.type = RepetitionQualifier::EXACTLY_N_TIMES,
-			.n = nTimes
+		return std::optional<RepetitionQualifier> {
+			std::in_place,
+				RepetitionQualifier::EXACTLY_N_TIMES,
+				nTimes
 		};
 	}
 
@@ -239,125 +244,109 @@ RepetitionQualifier parseRepetitionQuealifier(const std::string& regexPattern, i
 		skipBlanks(regexPattern, cursor);
 
 		if (cursor == regexPattern.size()) {
-			throw std::runtime_error("invalid regex");
+			goto fail;
 		}
 
 		if (regexPattern[cursor] == '}') {
 			cursor++;
-			return {
-				.type = RepetitionQualifier::AT_LEAST_N_TIMES,
-				.n = nTimes
+			return std::optional<RepetitionQualifier> {
+				std::in_place,
+					RepetitionQualifier::AT_LEAST_N_TIMES,
+					nTimes
 			};
 		}
 
 		if (std::isdigit(regexPattern[cursor])) {
-			int mTimes = parseInt(regexPattern, cursor);
+			mTimes = parseInt(regexPattern, cursor);
 
 			if (cursor == regexPattern.size() || regexPattern[cursor] != '}') {
-				throw std::runtime_error("invalid regex");
+				goto fail;
 			}
 
 			cursor++;
-			return {
-				.type = RepetitionQualifier::BETWEEN_N_AND_M_TIMES, 
-				.n = nTimes,
-				.m = mTimes
+			return std::optional<RepetitionQualifier> {
+				std::in_place,
+					RepetitionQualifier::BETWEEN_N_AND_M_TIMES,
+					nTimes,
+					mTimes
 			};
 		}
-
-		throw std::runtime_error("invalid regex");
 	}
 
-	throw std::runtime_error("invalid regex");
+fail:
+	cursor = oldCursor;
+	return std::nullopt;
 }
 
 constexpr bool isTheFirstCharOfQualifier(const char ch) {
 	return ch == '*' || ch == '+' || ch == '?' || ch == '{';
 }
 
-const bool isTheFollowCharOfConcatenation(const char ch) {
+constexpr bool isTheFollowCharOfConcatenation(const char ch) {
 	return ch == '|' || ch == ')';
 }
 
-// We assumed this function is called right after a basic unit is parsed.
-// so the cursor argument is next to the position where the basic unit ends.
-void addQualifierForBasicUnit(
-	Automata& automata, 
-	const std::string& regexPattern,
-	int& cursor,
-	int beginningCursorPositionOfBasicUnit,
+void addPositiveClosure(
+	Automata& automata,
+	const std::string& basicUnit,
 	int& initialStateOfBasicUnit,
 	int& acceptingStateOfBasicUnit) {
-	
-	if (regexPattern[cursor] == '*') {
-		auto [initialState, acceptingState] = addKleeneClosure(automata, initialStateOfBasicUnit, acceptingStateOfBasicUnit);
-		initialStateOfBasicUnit = initialState;
-		acceptingStateOfBasicUnit = acceptingState;
-		cursor++;
-		return;
-	}
+	// Since /a+/ is just /aa*/, and we've got the leading 'a', 
+	// // what we have to do is to generate the following /a*/ part.
+	int _cursor = 0;
+	const auto [initialState, acceptingState] = parseRegex(automata, basicUnit + '*', _cursor);
+	addTransition(automata, acceptingStateOfBasicUnit, eps(initialState));
+	acceptingStateOfBasicUnit = acceptingState;
+}
 
-	const auto basicUnit = regexPattern.substr(beginningCursorPositionOfBasicUnit, cursor);
+void addRepetitionQualifier(
+	Automata& automata,
+	const std::string& basicUnit,
+	int& initialStateOfBasicUnit,
+	int& acceptingStateOfBasicUnit,
+	const RepetitionQualifier& repetition) {
 
-	if (regexPattern[cursor] == '+') {
-		// Since /a+/ is just /aa*/, and we've got the leading 'a', 
-		// what we have to do is to generate the following /a*/ part.
-		int _cursor = 0;
-		auto [initialState, acceptingState] = parseRegex(automata, basicUnit + '*', _cursor);
-		addTransition(automata, acceptingStateOfBasicUnit, eps(initialState));
-		acceptingStateOfBasicUnit = acceptingState;
-		cursor++;
-	}
-	else if (regexPattern[cursor] == '?') {
-		addTransition(automata, initialStateOfBasicUnit, eps(acceptingStateOfBasicUnit));
-		cursor++;
-	}
-	else if (regexPattern[cursor] == '{') {
-		const auto repetition = parseRepetitionQuealifier(regexPattern, cursor);
-
-		if (repetition.n > 1) {
-			for (int i = 0; i < repetition.n - 1; i++) {
-				int _cursor = 0;
-				const auto [initialState, acceptingState] = parseRegex(automata, basicUnit, _cursor);
-				addTransition(automata, acceptingStateOfBasicUnit, eps(initialState));
-				acceptingStateOfBasicUnit = acceptingState;
-			}
-		}
-
-		if (repetition.type == RepetitionQualifier::AT_LEAST_N_TIMES) {
+	if (repetition.n > 1) {
+		for (int i = 0; i < repetition.n - 1; i++) {
 			int _cursor = 0;
-			auto [initialState, acceptingState] = parseRegex(automata, basicUnit + "*", _cursor);
+			const auto [initialState, acceptingState] = parseRegex(automata, basicUnit, _cursor);
 			addTransition(automata, acceptingStateOfBasicUnit, eps(initialState));
 			acceptingStateOfBasicUnit = acceptingState;
 		}
-		else if (repetition.type == RepetitionQualifier::BETWEEN_N_AND_M_TIMES) {
-			if (repetition.n > repetition.m) {
-				throw std::runtime_error("numbers out of order in {} qualifier");
-			}
-
-			std::vector<int> vectorOfInitialStates;
-
-			for (int i = 0; i < repetition.m - repetition.n; i++) {
-				int _cursor = 0;
-				const auto [initialState, acceptingState] = parseRegex(automata, basicUnit, _cursor);
-				vectorOfInitialStates.push_back(initialState);
-				addTransition(automata, acceptingStateOfBasicUnit, eps(initialState));
-				acceptingStateOfBasicUnit = acceptingState;
-			}
-
-			for (const int state : vectorOfInitialStates) {
-				addTransition(automata, state, eps(acceptingStateOfBasicUnit));
-			}
-		}
 	}
 
+	if (repetition.type == RepetitionQualifier::AT_LEAST_N_TIMES) {
+		int _cursor = 0;
+		auto [initialState, acceptingState] = parseRegex(automata, basicUnit + "*", _cursor);
+		addTransition(automata, acceptingStateOfBasicUnit, eps(initialState));
+		acceptingStateOfBasicUnit = acceptingState;
+	}
+	else if (repetition.type == RepetitionQualifier::BETWEEN_N_AND_M_TIMES) {
+		if (repetition.n > repetition.m) {
+			throw std::runtime_error("numbers out of order in {} qualifier");
+		}
+
+		std::vector<int> vectorOfInitialStates;
+
+		for (int i = 0; i < repetition.m - repetition.n; i++) {
+			int _cursor = 0;
+			const auto [initialState, acceptingState] = parseRegex(automata, basicUnit, _cursor);
+			vectorOfInitialStates.push_back(initialState);
+			addTransition(automata, acceptingStateOfBasicUnit, eps(initialState));
+			acceptingStateOfBasicUnit = acceptingState;
+		}
+
+		for (const int state : vectorOfInitialStates) {
+			addTransition(automata, state, eps(acceptingStateOfBasicUnit));
+		}
+	}
 }
 
 std::tuple<InitialState, AcceptingState> parseConcatenation(Automata& automata, const std::string& regexPattern, int& cursor) {
 	bool isFirstBasicUnit = true;
 	int initialState;
 	int acceptingState;
-	
+
 	// for Corner case like //, /|/, /()/, returns a epsilon transition immediately.
 	if (cursor == regexPattern.size() || isTheFollowCharOfConcatenation(regexPattern[cursor])) {
 		initialState = addNewState(automata);
@@ -367,30 +356,67 @@ std::tuple<InitialState, AcceptingState> parseConcatenation(Automata& automata, 
 		return { initialState, acceptingState };
 	}
 
-	if (isTheFirstCharOfQualifier(regexPattern[cursor])) {
+	if (regexPattern[cursor] == '*' ||
+		regexPattern[cursor] == '+' ||
+		regexPattern[cursor] == '?' ||
+		parseRepetitionQualifier(regexPattern, cursor)) {
 		// E.g. regex *abc isn't valid, so does foo(*abc) and bc|*de
 		throw std::runtime_error(
 			"A qualifier cannot be the first character of a regex, "
 			"it must be placed after a character, a right parenthesis or a right bracket.\n"
-			"For example: a*, (abc)* and [abc]*"
+			"For example: /a*/, /(abc)+/ and /[abc]{3}/"
 		);
 	}
 
 	// notice: regexes /}/ and /]/ are valid. They just match the correspondent character, namely '}' and ']'.
 
 	do {
-		auto beginningCursorPositionOfBasicUnit = cursor;
+		const auto basicUnitStartIndex = cursor;
 		auto [initialStateOfBasicUnit, acceptingStateOfBasicUnit] = parseRegexBasicUnit(automata, regexPattern, cursor);
+		const auto basicUnitEndIndex = cursor;
+
 
 		if (cursor < regexPattern.size() && isTheFirstCharOfQualifier(regexPattern[cursor])) {
-			addQualifierForBasicUnit(
-				automata,
-				regexPattern,
-				cursor,
-				beginningCursorPositionOfBasicUnit,
-				initialStateOfBasicUnit,
-				acceptingStateOfBasicUnit
-			);
+
+			if (regexPattern[cursor] == '*') {
+				addKleeneClosure(automata, initialStateOfBasicUnit, acceptingStateOfBasicUnit);
+				cursor++;
+			}
+			else if (regexPattern[cursor] == '+') {
+				const auto basicUnit = regexPattern.substr(basicUnitStartIndex, basicUnitEndIndex);
+				addPositiveClosure(
+					automata,
+					basicUnit,
+					initialStateOfBasicUnit,
+					acceptingStateOfBasicUnit
+				);
+				cursor++;
+			}
+			else if (regexPattern[cursor] == '?') {
+				addTransition(automata, initialStateOfBasicUnit, eps(acceptingStateOfBasicUnit));
+				cursor++;
+			}
+			else if (regexPattern[cursor] == '{') {
+				// The cursor will only be advanced when we parse a repetition qualifier successfully.
+				// Otherwise it won't be changed.
+				const auto repetitionQualifier = parseRepetitionQualifier(regexPattern, cursor);
+
+				// A invalid repetition qualifier are treat as character concatenation.
+				// for example, /{1,/ matches '{', '1' and ',' in sequence.
+				//
+				// Skip to the next round then the function will treat these character normally.
+				if (!repetitionQualifier) continue;
+
+				const 
+				const auto basicUnit = regexPattern.substr(basicUnitStartIndex, basicUnitEndIndex);
+				addRepetitionQualifier(
+					automata,
+					basicUnit,
+					initialStateOfBasicUnit,
+					acceptingStateOfBasicUnit,
+					*repetitionQualifier
+				);
+			}
 
 			if (cursor < regexPattern.size() && isTheFirstCharOfQualifier(regexPattern[cursor])) {
 				// Expression like a** is not valid.
@@ -535,7 +561,7 @@ std::tuple<InitialState, AcceptingState> parseCharacterClass(Automata& automata,
 		else {
 			addTransition(automata, initialState, to(acceptingState, acceptsAnyCharacter()));
 		}
-		
+
 	}
 	else {
 		if (acceptingMode == Transition::INCLUDE_CHARS) {
@@ -553,7 +579,7 @@ Automata convertRegexToNFA(const std::string regexPattern) {
 	Automata automata;
 	int cursor = 0;
 
-	const auto [ theInitialState, theAcceptingState ] = parseRegex(automata, regexPattern, cursor);
+	const auto [theInitialState, theAcceptingState] = parseRegex(automata, regexPattern, cursor);
 	automata.stateTypes[theInitialState] = INITIAL_STATE;
 	automata.stateTypes[theAcceptingState] = ACCEPTING_STATE;
 
