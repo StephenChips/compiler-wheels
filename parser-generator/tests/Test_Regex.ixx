@@ -7,11 +7,6 @@ module;
 export module Test_Regex;
 import Regex;
 
-// TODO:
-// Currently we use int to store the repetition times for a repetition qualifier.=
-// It may cause overflow if the parsed number it's too big. Consider using a BigInt
-// object instead.
-
 TEST(Test_Regex, test_match_single_character) {
 	FAIL();
 	Regex pattern("abc");

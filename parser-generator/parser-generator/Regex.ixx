@@ -205,9 +205,16 @@ void skipBlanks(const std::string& str, int& cursor) {
 int parseInt(const std::string& regexPattern, int& cursor) {
 	int n = 0;
 	do {
-		n = n * 10 + regexPattern[cursor] - '0';
+		int value = regexPattern[cursor] - '0';
+		if (n > (INT_MAX - value) / 10) {
+			n = INT_MAX;
+		}
+		else {
+			n = n * 10 + value;
+		}
 		cursor++;
 	} while (cursor < regexPattern.size() && std::isdigit(regexPattern[cursor]));
+
 	return n;
 }
 
@@ -472,7 +479,9 @@ std::tuple<InitialState, AcceptingState> parseRegexBasicUnit(Automata& automata,
 
 std::tuple<InitialState, AcceptingState> parseCharacterClass(Automata& automata, const std::string& regexPattern, int& cursor)
 {
-	std::optional<char> previousCharacter; // The character right before one that the cursor's now pointing.
+	// The character right before one that the cursor's now pointing.
+	// If the previous one is the '[', the value will be std::nullopt.
+	std::optional<char> previousCharacter; 
 	std::vector<std::variant<char, Transition::Range>> conditions;
 	Transition::AcceptingMode acceptingMode = Transition::INCLUDE_CHARS;
 
@@ -556,9 +565,11 @@ std::tuple<InitialState, AcceptingState> parseCharacterClass(Automata& automata,
 	const auto acceptingState = addNewState(automata);
 	if (conditions.empty()) {
 		if (acceptingMode == Transition::INCLUDE_CHARS) {
+			// /[]/
 			addTransition(automata, initialState, eps(acceptingState));
 		}
 		else {
+			// /[^]/
 			addTransition(automata, initialState, to(acceptingState, acceptsAnyCharacter()));
 		}
 
