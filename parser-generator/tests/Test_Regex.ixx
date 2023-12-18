@@ -581,7 +581,90 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, character_classes_that_has_no_e
 }
 
 TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, character_class_looks_invalid_but_its_ok) {
-	std::vector<std::string> patterns{ "[[-]", "[-]]", "]"};
+	auto actual = convertRegexToNFA("[[-]");
+	Automata expect = {
+		.stateGraph {
+			{ to(1, accepts({'[', '-'}))},
+			{}
+		},
+		.stateTypes {
+			INITIAL_STATE,
+			ACCEPTING_STATE
+		}
+	};
 
-	FAIL() << "Not implemented";
+	EXPECT_EQ(actual, expect);
+
+	actual = convertRegexToNFA("[---]");
+	expect = {
+		.stateGraph {
+			{ to(1, accepts(Transition::Range('-', '-')))},
+			{}
+		},
+		.stateTypes {
+			INITIAL_STATE,
+			ACCEPTING_STATE
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+
+	try {
+		actual = convertRegexToNFA("[[--]");
+		FAIL("Expects the regex /[[--]/ to throw a std::runtime_error, but it doesn't throw.");
+	}
+	catch (std::runtime_error e) {
+		EXPECT_STREQ(e.what(), "Invalid regex expression: range out of order in the character class.");
+	}
+	catch (...) {
+		FAIL("Expects the regex /[[--]/ to throw a std::runtime_error, but it throws an other type of exception.");
+	}
+
+	actual = convertRegexToNFA("[--[]");
+	expect = {
+		.stateGraph {
+			{ to(1, accepts(Transition::Range('-', '[')))},
+			{}
+		},
+		.stateTypes {
+			INITIAL_STATE,
+			ACCEPTING_STATE
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+
+	actual = convertRegexToNFA("[-]]");
+	expect = {
+		.stateGraph {
+			{ to(1, accepts('-')) },
+			{ eps(2) },
+			{ to(3, accepts(']')) },
+			{}
+		},
+		.stateTypes {
+			INITIAL_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			ACCEPTING_STATE
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+}
+
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, a_lonely_right_bracket_is_just_a_right_bracket) {
+	auto actual = convertRegexToNFA("]");
+	Automata expect = {
+		.stateGraph {
+			{ to(1, accepts(']')) },
+			{}
+		},
+		.stateTypes {
+			INITIAL_STATE,
+			ACCEPTING_STATE
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
 }

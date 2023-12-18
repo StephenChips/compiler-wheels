@@ -376,11 +376,7 @@ std::tuple<InitialState, AcceptingState> parseConcatenation(Automata& automata, 
 		);
 	}
 
-	if (regexPattern[cursor] == '}' || regexPattern[cursor] == ']') {
-		// It isn't valid that read the ending brackets without reading the starting one first.
-		// For example: /a}/, /]acb/ all all invalid regexes.
-		throw std::runtime_error("Invalid regular expression");
-	}
+	// notice: regexes /}/ and /]/ are valid. They just match the correspondent character, namely '}' and ']'.
 
 	do {
 		auto beginningCursorPositionOfBasicUnit = cursor;
@@ -477,7 +473,7 @@ std::tuple<InitialState, AcceptingState> parseCharacterClass(Automata& automata,
 		// in the class. e.g. /[-a]/. 
 		// Such character class means the '-' is one of its acceptable characters.
 		if (!previousCharacter) {
-			conditions.push_back('-');
+			previousCharacter = '-';
 			cursor++;
 			continue;
 		}
@@ -500,9 +496,8 @@ std::tuple<InitialState, AcceptingState> parseCharacterClass(Automata& automata,
 		// of its acceptable characters.
 		if (regexPattern[cursor] == ']') {
 			conditions.push_back(characterBeforeDash);
-			conditions.push_back('-');
-			cursor++;
-			continue;
+			previousCharacter = '-';
+			break;
 		}
 
 		// Otherwise we get the character after the '-'.
