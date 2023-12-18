@@ -7,6 +7,11 @@ module;
 export module Test_Regex;
 import Regex;
 
+// TODO:
+// Currently we use int to store the repetition times for a repetition qualifier.=
+// It may cause overflow if the parsed number it's too big. Consider using a BigInt
+// object instead.
+
 TEST(Test_Regex, test_match_single_character) {
 	FAIL();
 	Regex pattern("abc");
@@ -150,7 +155,7 @@ TEST(Test_ConvertRegexToNFA_BasicRegexSyntax, match_a_single_character) {
 
 TEST(Test_ConvertRegexToNFA_BasicRegexSyntax, match_a_word) {
 	auto actual = convertRegexToNFA("while");
-	auto expect = Automata {
+	auto expect = Automata{
 			.stateGraph = {
 				{ to(1, accepts('w')) },
 				{ to(2, accepts(EPSILON)) },
@@ -185,10 +190,10 @@ TEST(Test_ConvertRegexToNFA_BasicRegexSyntax, match_any_of_two_words) {
 	auto expect = Automata{
 		.stateGraph = {
 			{ to(1, accepts('c'))},
-		    { to(2, accepts(EPSILON)) },
-		    { to(3, accepts('a')) },
-		    { to(4, accepts(EPSILON)) },
-		    { to(5, accepts('t')) },
+			{ to(2, accepts(EPSILON)) },
+			{ to(3, accepts('a')) },
+			{ to(4, accepts(EPSILON)) },
+			{ to(5, accepts('t')) },
 			{ to(7, accepts(EPSILON)) },
 			{ to(0, accepts(EPSILON)), to(8, accepts(EPSILON)) },
 			{},
@@ -272,7 +277,7 @@ TEST(Test_ConvertRegexToNFA_BasicRegexSyntax, repeats_any_number_of_times) {
 * Following section of test cases test non-basic regexes, those contains features
 * that are not concatenation, alternative or kleene closure. For example:
 * /a+/, /a{1, 5}/
-* 
+*
 * The "expected" automata may be generated from a equivalent basic regexes.
 * As long as we have sufficient tests on the basic regexes, which garentee
 * the function can return a correct automata when parsing a basic regex,
@@ -299,7 +304,7 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, matches_at_least_once) {
 			{ to(1, accepts('a'))},
 			{ to(4, accepts(EPSILON)) },
 			{ to(3, accepts('a')) },
-			{ to(5, accepts(EPSILON)), 
+			{ to(5, accepts(EPSILON)),
 			to(2, accepts(EPSILON)) },
 			{ to(5, accepts(EPSILON)), to(2, accepts(EPSILON)) },
 			{}
@@ -357,7 +362,7 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, leading_qualiders_are_invalid) 
 			FAIL() << std::format("Invalid regex /{}/ should've caused an exception but haven't.", regex);
 		}
 		catch (std::runtime_error e) {
-			EXPECT_STREQ(e.what(), 
+			EXPECT_STREQ(e.what(),
 				"A qualifier cannot be the first character of a regex, "
 				"it must be placed after a character, a right parenthesis or a right bracket.\n"
 				"For example: /a*/, /(abc)+/ and /[abc]{3}/"
@@ -413,7 +418,7 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, repeats_N_to_M_times) {
 
 TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, incomplete_repetition_should_be_treat_as_concatenation) {
 	auto actual = convertRegexToNFA("{");
-	auto expect = Automata {
+	auto expect = Automata{
 		.stateGraph {
 			{ to(1, accepts('{')) },
 			{}
@@ -490,6 +495,42 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, incomplete_repetition_should_be
 
 		.stateTypes {
 			INITIAL_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
+			ACCEPTING_STATE,
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+
+
+	actual = convertRegexToNFA("{1, 3a");
+	expect = {
+		.stateGraph {
+			{ to(1, accepts('{')) },
+			{ eps(2) },
+			{ to(3, accepts('1')) },
+			{ eps(4) },
+			{ to(5, accepts(',')) },
+			{ eps(6) },
+			{ to(7, accepts(' ')) },
+			{ eps(8) },
+			{ to(9, accepts('3')) },
+			{ eps(10) },
+			{ to(11, accepts('a')) },
+			{}
+		},
+
+		.stateTypes {
+			INITIAL_STATE,
+			PLAIN_STATE,
+			PLAIN_STATE,
 			PLAIN_STATE,
 			PLAIN_STATE,
 			PLAIN_STATE,
@@ -635,7 +676,7 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, square_bracket_match_a_space_or
 
 
 TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, character_class_that_is_out_of_order) {
-	std::vector<std::string> patterns{ "[c-a]", "[Z-A]", "[9-0]"};
+	std::vector<std::string> patterns{ "[c-a]", "[Z-A]", "[9-0]" };
 	for (const auto& pattern : patterns) {
 		try {
 			convertRegexToNFA(pattern);
@@ -652,7 +693,7 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, character_class_that_is_out_of_
 }
 
 TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, character_classes_that_has_no_ending_bracket) {
-	std::vector<std::string> patterns{ "[", "[12", "[12,", "[12,33", "[a"};
+	std::vector<std::string> patterns{ "[", "[12", "[12,", "[12,33", "[a" };
 
 	for (const auto& pattern : patterns) {
 		try {
