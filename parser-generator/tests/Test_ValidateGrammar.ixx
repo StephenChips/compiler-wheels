@@ -6,7 +6,6 @@ module;
 export module Tests;
 
 import Grammar;
-import ValidateGrammar;
 
 TEST(Test_ValidateRegex, test_simple_correct_grammar) {
 	auto g = Grammar{
