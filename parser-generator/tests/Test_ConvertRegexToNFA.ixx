@@ -559,19 +559,23 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, match_a_range_of_characters) {
 }
 
 TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, match_a_set_and_a_range_of_characters) {
-	auto actual = convertRegexToNFA("[abcA-C]");
-	Automata expect = {
-		.stateGraph = {
-			{ to(1, accepts({ 'a', 'b', 'c', Transition::Range{'A', 'C'}}))},
-			{}
-		},
-		.stateTypes = {
-			INITIAL_STATE,
-			ACCEPTING_STATE
-		}
-	};
+	std::vector<std::string> patterns{ "[abcA-C]", "[aA-Cbc]", "[A-Cabc]" };
 
-	EXPECT_EQ(actual, expect);
+	for (const auto& pattern : patterns) {
+		auto actual = convertRegexToNFA(pattern);
+		Automata expect = {
+			.stateGraph = {
+				{ to(1, accepts({ Transition::Range{'A', 'C'}, 'a', 'b', 'c' }))},
+				{}
+			},
+			.stateTypes = {
+				INITIAL_STATE,
+				ACCEPTING_STATE
+			}
+		};
+
+		EXPECT_EQ(actual, expect);
+	}
 }
 
 TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, match_any_except_a_set_of_characters) {
@@ -610,7 +614,7 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, match_any_except_a_set_and_a_ra
 	auto actual = convertRegexToNFA("[^abcA-C]");
 	Automata expect = {
 		.stateGraph = {
-			{ to(1, acceptsAnyExcept({ 'a', 'b', 'c', Transition::Range{'A', 'C'}}))},
+			{ to(1, acceptsAnyExcept({ Transition::Range{'A', 'C'}, 'a', 'b', 'c' }))},
 			{}
 		},
 		.stateTypes = {
@@ -690,11 +694,11 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, character_classes_that_has_no_e
 	}
 }
 
-TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, character_class_looks_invalid_but_its_ok) {
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, quirky_character_classes) {
 	auto actual = convertRegexToNFA("[[-]");
 	Automata expect = {
 		.stateGraph {
-			{ to(1, accepts({'[', '-'}))},
+			{ to(1, accepts({'-', '[' }))},
 			{}
 		},
 		.stateTypes {
@@ -708,7 +712,7 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, character_class_looks_invalid_b
 	actual = convertRegexToNFA("[---]");
 	expect = {
 		.stateGraph {
-			{ to(1, accepts(Transition::Range('-', '-')))},
+			{ to(1, accepts('-'))},
 			{}
 		},
 		.stateTypes {
@@ -761,6 +765,20 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, character_class_looks_invalid_b
 	};
 
 	EXPECT_EQ(actual, expect);
+
+	actual = convertRegexToNFA("[a-u-z]");
+	expect = {
+		.stateGraph {
+			{ to(1, accepts({'-', Transition::Range('a', 'u'), 'z'}))},
+			{}
+		},
+		.stateTypes {
+			INITIAL_STATE,
+			ACCEPTING_STATE
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
 }
 
 TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, a_lonely_right_bracket_is_just_a_right_bracket) {
@@ -777,4 +795,49 @@ TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, a_lonely_right_bracket_is_just_
 	};
 
 	EXPECT_EQ(actual, expect);
+}
+
+TEST(Test_ConvertRegexToNFA_EnhancedRegexSyntax, character_class_overlapping_ranges) {
+	auto actual = convertRegexToNFA("[A-uc-z]");
+	Automata expect = {
+		.stateGraph {
+			{ to(1, accepts(Transition::Range('A', 'z')))},
+			{}
+		},
+		.stateTypes {
+			INITIAL_STATE,
+			ACCEPTING_STATE
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+
+	actual = convertRegexToNFA("[a-za]");
+	expect = {
+		.stateGraph {
+			{ to(1, accepts(Transition::Range('a', 'z')))},
+			{}
+		},
+		.stateTypes {
+			INITIAL_STATE,
+			ACCEPTING_STATE
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+
+	actual = convertRegexToNFA("[aba]");
+	expect = {
+		.stateGraph {
+			{ to(1, accepts({'a', 'b'}))},
+			{}
+		},
+		.stateTypes {
+			INITIAL_STATE,
+			ACCEPTING_STATE
+		}
+	};
+
+	EXPECT_EQ(actual, expect);
+
 }

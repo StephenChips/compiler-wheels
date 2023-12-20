@@ -10,6 +10,7 @@ module;
 #include <stdexcept>
 #include <ranges>
 #include <cctype>
+#include <algorithm>
 
 export module ConvertRegexToNFA;
 
@@ -18,6 +19,10 @@ import Automata;
 export Automata convertRegexToNFA(const std::string& regexPattern);
 
 module : private;
+
+// helper type for the visitor
+template<class... Ts>
+struct matches : Ts... { using Ts::operator()...; };
 
 struct RepetitionQualifier {
 	enum Type { EXACTLY_N_TIMES, AT_LEAST_N_TIMES, BETWEEN_N_AND_M_TIMES } type;
@@ -31,6 +36,7 @@ std::tuple<InitialState, AcceptingState> parseRegex(Automata& automata, const st
 std::tuple<InitialState, AcceptingState> parseConcatenation(Automata& automata, const std::string& regexPattern, int& cursor);
 std::tuple<InitialState, AcceptingState> parseRegexBasicUnit(Automata& automata, const std::string& regexPattern, int& cursor);
 std::tuple<InitialState, AcceptingState> parseCharacterClass(Automata& automata, const std::string& regexPattern, int& cursor);
+void eliminateOverlappingConditions(Transition& transition);
 void addKleeneClosure(Automata& automata, int& initialState, int& acceptingState);
 int parseInt(const std::string& regexPattern, int& cursor);
 void skipBlanks(const std::string& str, int& cursor);
@@ -362,9 +368,6 @@ std::tuple<InitialState, AcceptingState> parseRegexBasicUnit(Automata& automata,
 
 std::tuple<InitialState, AcceptingState> parseCharacterClass(Automata& automata, const std::string& regexPattern, int& cursor)
 {
-	// The character right before one that the cursor's now pointing.
-	// If the previous one is the '[', the value will be std::nullopt.
-	std::optional<char> previousCharacter;
 	std::vector<std::variant<char, Transition::Range>> conditions;
 	Transition::AcceptingMode acceptingMode = Transition::INCLUDE_CHARS;
 
@@ -375,66 +378,29 @@ std::tuple<InitialState, AcceptingState> parseCharacterClass(Automata& automata,
 		cursor++;
 	}
 
+	// TODO: Apparently the program can only handle ASCII characters. Maybe consider Unicode later.
 	while (cursor < regexPattern.size() && regexPattern[cursor] != ']') {
-		// If the current character isn't a '-', we are sure that the previous
-		// character is not the beginning character of a range.
-		if (regexPattern[cursor] != '-') {
-			if (previousCharacter) {
-				conditions.push_back(*previousCharacter);
+		if (cursor + 2 < regexPattern.size() &&
+			regexPattern[cursor + 1] == '-' &&
+			regexPattern[cursor + 2] != ']') {
+			const char rangeStart = regexPattern[cursor];
+			const char rangeEnd = regexPattern[cursor + 2];
+
+			if (rangeStart > rangeEnd) {
+				throw std::runtime_error("Invalid regex expression: range out of order in the character class.");
 			}
-			previousCharacter = regexPattern[cursor];
+			else if (rangeStart == rangeEnd) {
+				conditions.push_back(rangeStart);
+			}
+			else {
+				conditions.push_back(Transition::Range{ rangeStart, rangeEnd });
+			}
+			cursor += 3;
+		}
+		else {
+			conditions.push_back(regexPattern[cursor]);
 			cursor++;
-			continue;
 		}
-
-		// If there isn't character being parsed, the '-' must be the first character
-		// in the class. e.g. /[-a]/. 
-		// Such character class means the '-' is one of its acceptable characters.
-		if (!previousCharacter) {
-			previousCharacter = '-';
-			cursor++;
-			continue;
-		}
-
-		// Otherwise we get the character before the '-'.
-		const char characterBeforeDash = *previousCharacter;
-
-		// If there is a character before '-', we shall inspect what follows it.
-		cursor++;
-
-		// If '-' is the last character of the string, we should breaks the loop
-		// and throw an error, because it misses the ending ']'.
-		// e.g. /[a-/
-		if (cursor == regexPattern.size()) {
-			break;
-		}
-
-		// If what follows '-' is a ']', it also cannot forms a range. e.g. /[a-]/.
-		// Such character class means the '-' and the character before it are two
-		// of its acceptable characters.
-		if (regexPattern[cursor] == ']') {
-			conditions.push_back(characterBeforeDash);
-			previousCharacter = '-';
-			break;
-		}
-
-		// Otherwise we get the character after the '-'.
-		const char characterAfterDash = regexPattern[cursor];
-		cursor++;
-
-		// Test invalid case like /[z-a]/.
-		if (characterBeforeDash > characterAfterDash) {
-			throw std::runtime_error("Invalid regex expression: range out of order in the character class.");
-		}
-
-		// Finally, we come to the situation that we can create a range!
-		conditions.push_back(Transition::Range{ characterBeforeDash, characterAfterDash });
-	}
-
-	// If the last condition is a char, it will be still in the 'previousCharacter' variable, we should add it
-	// the the vector now.
-	if (previousCharacter && (conditions.empty() || std::holds_alternative<char>(conditions.back()))) {
-		conditions.push_back(*previousCharacter);
 	}
 
 	if (cursor == regexPattern.size()) {
@@ -443,30 +409,95 @@ std::tuple<InitialState, AcceptingState> parseCharacterClass(Automata& automata,
 	else {
 		cursor++; // skip the ']'
 	}
-
+	
+	Transition transition;
 	const auto initialState = addNewState(automata);
 	const auto acceptingState = addNewState(automata);
 	if (conditions.empty()) {
 		if (acceptingMode == Transition::INCLUDE_CHARS) {
 			// /[]/
-			addTransition(automata, initialState, eps(acceptingState));
+			transition = eps(acceptingState);
 		}
 		else {
 			// /[^]/
-			addTransition(automata, initialState, to(acceptingState, acceptsAnyCharacter()));
+			transition = to(acceptingState, acceptsAnyCharacter());
 		}
 
 	}
 	else {
 		if (acceptingMode == Transition::INCLUDE_CHARS) {
-			addTransition(automata, initialState, to(acceptingState, accepts(conditions)));
+			transition = to(acceptingState, accepts(conditions));
 		}
 		else {
-			addTransition(automata, initialState, to(acceptingState, acceptsAnyExcept(conditions)));
+			transition = to(acceptingState, acceptsAnyExcept(conditions));
 		}
 	}
 
+	eliminateOverlappingConditions(transition);
+	
+	addTransition(automata, initialState, to(acceptingState, transition));
+
 	return { initialState, acceptingState };
+}
+
+bool compareTwoConditions(Transition::Condition& first, Transition::Condition& second) {
+	return std::visit(matches{
+		[](char a, char b) { return a < b; },
+		[](char a, Transition::Range& b) { return a < b.from; },
+		[](Transition::Range& a, char b) { return a.from < b;  },
+		[](Transition::Range& a, Transition::Range& b) { return a < b; }
+		}, first, second);
+};
+
+bool doesTwoConditionsOverlap(const Transition::Condition& theFirstOne, const Transition::Condition& theSecondOne) {
+	return std::visit(matches{
+		[](char a, char b) { return a == b; },
+		[](char a, const Transition::Range& b) { return a >= b.from && a <= b.to; },
+		[](const Transition::Range& a, char b) { return b >= a.from && b <= a.to;  },
+		[](const Transition::Range& a, const Transition::Range& b) {
+			return a.from < b.from && a.to >= b.from
+				|| a.from >= b.from && a.from <= b.to;
+		}
+		}, theFirstOne, theSecondOne);
+}
+
+void mergeTwoConditions(Transition::Condition& destination, const Transition::Condition& source) {
+	if (std::holds_alternative<char>(source)) return;
+	else if (std::holds_alternative<char>(destination)) {
+		destination = source;
+	}
+	else {
+		auto& a = std::get<Transition::Range>(destination);
+		const auto& b = std::get<Transition::Range>(source);
+		if (b.from < a.from) a.from = b.from;
+		if (b.to > a.to) a.to = b.to;
+	}
+}
+
+void eliminateOverlappingConditions(Transition& transition)
+{
+	auto& conditions = transition.conditions;
+
+	if (transition.mode == Transition::ACCEPT_ANY_CHARACTER) return;
+	if (conditions.size() <= 1) return;
+	
+	std::sort(conditions.begin(), conditions.end(), compareTwoConditions);
+
+	size_t i = 0;
+	size_t j = 0;
+	size_t k = 0;
+
+	while (j < conditions.size()) {
+		while (j < conditions.size() && doesTwoConditionsOverlap(conditions[i], conditions[j])) {
+			mergeTwoConditions(conditions[i], conditions[j]);
+			j++;
+		}
+
+		conditions[k++] = std::move(conditions[i]);
+		i = j;
+	}
+
+	conditions.resize(k);
 }
 
 Automata convertRegexToNFA(const std::string& regexPattern) {

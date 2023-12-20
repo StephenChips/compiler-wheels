@@ -2,14 +2,26 @@ module;
 
 #include <vector>
 #include <variant>
+#include <compare>
 
 export module Automata;
 
 export struct Transition {
 	struct Range {
 		char from, to;
+
 		bool operator==(const Range&) const = default;
+		bool operator<(const Range& other) const {
+			if (from == other.from) {
+				return to < other.to;
+			}
+			else {
+				return from < other.from;
+			}
+		};
 	};
+
+	using Condition = std::variant<char, Range>;
 
 	enum AcceptingMode {
 		INCLUDE_CHARS,
@@ -18,7 +30,7 @@ export struct Transition {
 	} mode;
 
 	int destination;
-	std::vector<std::variant<char, Range>> conditions;
+	std::vector<Condition> conditions;
 
 	bool operator==(const Transition&) const = default;
 };
@@ -117,7 +129,6 @@ int addNewState(Automata& automata, StateType stateType) {
 	automata.stateTypes.push_back(stateType);
 	return automata.stateGraph.size() - 1;
 }
-
 
 // Since the class is used internally, we can be sure that the "fromNode" won't be out of range.
 void addTransition(Automata& automata, int fromNode, Transition transition) {
